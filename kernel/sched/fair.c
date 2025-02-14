@@ -212,8 +212,8 @@ static void update_burst_score(struct sched_entity *se) {
 	se->burst_score = se->burst_penalty >> 2;
 
 	u8 new_prio = min(39, prio + se->burst_score);
-	// if (new_prio != prev_prio)
-	// 	reweight_task(p, new_prio);
+	if (new_prio != prev_prio)
+	 	reweight_task(p, new_prio);
 }
 
 static void update_burst_penalty(struct sched_entity *se) {
@@ -2921,6 +2921,16 @@ static void reweight_entity(struct cfs_rq *cfs_rq, struct sched_entity *se,
 
 	if (se->on_rq)
 		account_entity_enqueue(cfs_rq, se);
+}
+
+void reweight_task(struct task_struct *p, int prio)
+{
+	struct sched_entity *se = &p->se;
+	struct cfs_rq *cfs_rq = cfs_rq_of(se);
+	struct load_weight *load = &se->load;
+	unsigned long weight = scale_load(sched_prio_to_weight[prio]);
+	reweight_entity(cfs_rq, se, weight);
+	load->inv_weight = sched_prio_to_wmult[prio];
 }
 
 static inline int throttled_hierarchy(struct cfs_rq *cfs_rq);
@@ -12813,6 +12823,17 @@ static unsigned int get_rr_interval_fair(struct rq *rq, struct task_struct *task
 
 	return rr_interval;
 }
+
+#ifdef CONFIG_SCHED_CASS
+#include "cass.c"
+
+/* Use CASS. A dummy wrapper ensures the replaced function is still "used". */
+static inline void *select_task_rq_fair_dummy(void)
+{
+	return (void *)select_task_rq_fair;
+}
+#define select_task_rq_fair cass_select_task_rq_fair
+#endif /* CONFIG_SCHED_CASS */
 
 /*
  * All the scheduling class methods:
